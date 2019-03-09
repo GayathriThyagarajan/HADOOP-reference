@@ -1,0 +1,158 @@
+===============================SQOOP===========================================
+import:
+
+sqoop import --connect jdbc:mysql://localhost/test --table emp -m 1
+
+import to target-directory:
+
+sqoop import --connect jdbc:mysql://localhost/test --username root --table emp -m 1 --target-dir /user/cloudera/satya  
+
+
+Importing Only a Subset of Data
+
+sqoop import --connect jdbc:mysql://mysql.example.com/sqoop --username root --table emp --where "empsalary > '7000'" -m 1
+
+sqoop import --connect jdbc:mysql://localhost/test username root --table emp -m 1 --as-sequencefile 
+
+sqoop import --connect jdbc:mysql://localhost/test username root --table employee2 -m 1 --compress
+
+parallelism:
+
+sqoop import --connect jdbc:mysql://localhost/test --table employee2 -m 1 --num-mappers 4
+
+sqoop import-all-tables --connect jdbc:mysql://localhost/test --warehouse-dir /user/cloudera/jay -m 1 
+
+
+sqoop import-all-tables --connect jdbc:mysql://localhost/test --warehouse-dir /user/cloudera/jai -m 1 
+--exclude-tables table1, table2
+
+incremental append:
+
+sqoop import \
+--connect jdbc:mysql://localhost/test \
+--username root \
+--table emp \
+--incremental append \
+--check-column empid \
+--last-value 5 -m 1
+
+hiveimport:
+
+sqoop import --connect jdbc:mysql://localhost/test --table emp --hive-import -m 1
+
+sqoop list-databases --connect jdbc:mysql://localhost/
+
+sqoop list-tables --connect jdbc:mysql://localhost/test
+
+sqoop eval --connect jdbc:mysql://localhost/test --query "SELECT * FROM emp"
+sqoop eval --connect jdbc:mysql://localhost/test --query "delete FROM emp where empname='shan'"
+sqoop eval --connect jdbc:mysql://localhost/test --query "insert into emp values (4,'shan',8000)"
+
+sqoop eval --connect jdbc:mysql://localhost/test --query "SELECT count(*) FROM emp"
+
+
+sqoop eval --connect jdbc:mysql://localhost/test --query "SELECT * FROM emp LIMIT 3"
+
+sqoop eval --connect jdbc:mysql://localhost/test --query "SELECT * FROM emp order by empid"
+
+sqoop eval --connect jdbc:mysql://localhost/test --query "SELECT * FROM emp order by empid limit 4"
+
+hadoop fs -ls /user/cloudera/empnew
+
+/user/cloudera/empnew/part-m-00000
+
+sqoop export \
+--connect jdbc:mysql://localhost/test \
+--username root \
+--table emp \
+--export-dir /user/cloudera/empnew
+
+
+
+sqoop job \
+	--create empjob \
+	-- \
+ 	export \
+--connect jdbc:mysql://localhost/test \
+--username root \
+--table emp \
+--export-dir /user/cloudera/empnew
+ 
+sqoop job --list
+
+sqoop job --exec empjob
+
+
+sqoop job --delete empjob
+
+sqoop job --show empjob
+
+
+===============================PIG word count=======================================
+--Register custom .jar containing UDF
+REGISTER /home/cloudera/PigUDFs.jar;
+
+--Load HDFS data into  relation
+book = LOAD 'file path name' USING PigStorage() AS (lines:chararray);
+
+--Break up lines into words
+words = FOREACH book GENERATE FLATTEN(TOKENIZE(lines)) as word;
+
+--Call custom UDF to send all words to lowercase
+wordsLower = FOREACH words GENERATE hadoopnugs.pig.udfs.toLower(word);
+
+--Group words
+wordsGrouped = GROUP wordsLower BY $0;
+
+--Aggregate words
+wordsAggregated = FOREACH wordsGrouped GENERATE group as word, COUNT(wordsGrouped) as wordCount;
+
+--Sort aggregated words
+wordsSorted = ORDER wordsAggregated By  wordCount DESC;
+
+--Store sorted results into HDFS
+STORE wordsSorted INTO 'hdfs://data/small/pigresults2';
+
+
+===============================HIVE Class practise problems========================================================
+
+CREATE TABLE movies (mov_id BIGINT , mov_name STRING ,prod_studio STRING, col_world DOUBLE , col_us_canada DOUBLE , col_uk DOUBLE , col_aus DOUBLE, rel_year STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY  ',' ;
+
+LOAD DATA local INPATH '/home/cloudera/Desktop/Hive_New/movies.txt' OVERWRITE INTO TABLE movies;
+LOAD DATA INPATH '/user/cloudera/movie/movies.txt' OVERWRITE INTO TABLE movies;
+
+CREATE EXTERNAL TABLE ext_movies (mov_id BIGINT, mov_name STRING, prod_studio STRING, col_world DOUBLE,	col_us_canada DOUBLE, col_uk DOUBLE, col_aus DOUBLE, rel_year STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY  ',' LOCATION '/user/cloudera/movie';
+
+create table store_day_sale_t (store_nbr int,store_name string,sale_date string,sale_amount double) row format delimited fields terminated by ',';
+
+load data local inpath '/home/cloudera/Desktop/data/sale_data.txt' overwrite into table store_day_sale_t;
+
+CREATE TABLE page_view(viewTime INT, userid BIGINT, page_url STRING, referrer_url STRING, ip STRING COMMENT 'IP Address of the User') COMMENT 'This is the staging page view table' PARTITIONED BY(dt STRING, country STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS TEXTFILE;
+
+LOAD DATA local inpath '/home/cloudera/Desktop/data/pageviews.txt' into table page_view partition (dt='05/02/2015', country='US');
+
+LOAD DATA local inpath '/home/cloudera/Desktop/data/pageviews.txt' into table page_view partition (dt='26/08/2015', country='AUS');
+
+CREATE EXTERNAL TABLE page_view_stage(viewTime INT, userid BIGINT, page_url STRING, referrer_url STRING, ip STRING COMMENT 'IP Address of the User', country STRING COMMENT 'country of origination', dt STRING) COMMENT 'This is the staging page view table' ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS TEXTFILE LOCATION '/user/cloudera/sat/page_view';
+
+hadoop fs -put  /home/cloudera/Desktop/data/pageviewstage.txt /user/cloudera/sat/page_view/pageview.txt
+
+from page_view_stage pvs insert overwrite table page_view partition (dt='26/08/2015', country='CANADA') select pvs.viewtime, pvs.userid, pvs.page_url, pvs.referrer_url, pvs.ip;
+
+CREATE EXTERNAL TABLE page_view_dpstage(viewTime INT, userid BIGINT, page_url STRING, referrer_url STRING, ip STRING  COMMENT 'IP Address of the User', country STRING COMMENT 'country of origination', dt STRING) COMMENT 'This is the staging page view table' ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS TEXTFILE LOCATION '/user/cloudera/sat/page_view_dpstage';
+
+hadoop fs -put /home/cloudera/Desktop/data/pageviewstage.txt /user/cloudera/sat/page_view_dpstage;
+
+set hive.exec.dynamic.partition.mode=nonstrict;
+set hive.exec.dynamic.partition=true;
+
+CREATE TABLE page_view_dp(viewTime INT, userid BIGINT, page_url STRING, referrer_url STRING, ip STRING COMMENT 'IP Address of the User') COMMENT 'This is the staging page view table' PARTITIONED BY(dt STRING, country STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS TEXTFILE;
+
+from page_view_dpstage insert overwrite table page_view_dp partition (dt, country) select viewtime, userid, page_url, referrer_url, ip, dt, country;
+
+
+
+
+
+
+
